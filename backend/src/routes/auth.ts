@@ -1,10 +1,43 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
 import supabase from "../db.js";
 import { signToken } from "../auth.js";
 import { requireAuth, type AuthRequest } from "../middleware/requireAuth.js";
 
 const router = Router();
+
+// Tight rate limit only for this endpoint — it's unauthenticated and could be
+// abused to enumerate registered emails by scanning for "taken" responses.
+const checkEmailLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 20,             // max 20 checks per IP per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please slow down." },
+});
+
+// ── Check email availability ─────────────────────────────────────────────────
+// GET /auth/check-email?email=...
+// Returns { available: true } if the email is not yet registered.
+// Rate limited to prevent email enumeration attacks.
+router.get("/check-email", checkEmailLimiter, async (req, res) => {
+  const email = String(req.query.email || "").trim().toLowerCase();
+
+  if (!email) {
+    return res.status(400).json({ error: "Email is required." });
+  }
+
+  // .maybeSingle() — like .single() but returns null instead of an error when
+  // no row is found. We only need the id — no point fetching password etc.
+  const { data: existing } = await supabase
+    .from("users")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  return res.json({ available: existing === null });
+});
 
 // ── Register ────────────────────────────────────────────────────────────────
 // Flow: validate input → hash password → insert user → sign JWT → respond

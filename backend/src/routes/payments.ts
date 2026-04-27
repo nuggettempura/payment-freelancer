@@ -46,4 +46,17 @@ router.post("/", requireAuth, async (req: AuthRequest, res, next) => {
   return res.status(statusCode).json(data);
 });
 
+// GET /payments
+// Returns all payments for the authenticated user, newest first.
+router.get("/", requireAuth, async (req: AuthRequest, res, next) => {
+  const { data: payments, error } = await supabase
+    .from("payments")
+    .select("*")
+    .eq("user_id", req.user!.id)
+    .order("created_at", { ascending: false });
+
+  if (error) return next(error);
+  return res.json({ payments });
+});
+
 export default router;
