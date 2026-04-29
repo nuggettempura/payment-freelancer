@@ -1,44 +1,23 @@
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:4000";
+import type {
+  LoginPayload,
+  LoginResponse,
+  Payment,
+  PaymentPayload,
+  RegisterPayLoad,
+} from "../types";
 
-export type LoginPayload = {
-  email: string;
-  password: string;
-};
-
-export type LoginResponse = {
-  token: string;
-  user: {
-    id: string;
-    email: string;
-    name?: string;
-  };
-};
-
-export type PaymentPayload = {
-  amount: number;
-  currency: string;
-  idempotencyKey: string;
-};
-
-export type PaymentResponse = {
-  reused: boolean;
-  payment: {
-    id: string;
-    reference: string;
-    amount: number;
-    currency: string;
-    status: string;
-    createdAt: string;
-  };
-};
+// /api prefix is proxied to Express by Vite (see vite.config.ts).
+// No hardcoded port or hostname — works in dev and production without changes.
+const API_PREFIX = "/api";
 
 async function request<T>(path: string, options: RequestInit = {}) {
-  const response = await fetch(`${BACKEND_URL}${path}`, {
+  const { headers: optionHeaders, ...restOptions } = options;
+  const response = await fetch(`${API_PREFIX}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers ?? {}),
+      ...(optionHeaders ?? {}),
     },
-    ...options,
+    ...restOptions,
   });
 
   const body = await response.json().catch(() => null);
@@ -57,6 +36,26 @@ export async function loginUser(payload: LoginPayload) {
   });
 }
 
+export async function registerUser(payload: RegisterPayLoad) {
+  return request<LoginResponse>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// Uses a plain fetch (not the request() helper) because a 429 from the rate
+// limiter should not throw — the UI handles it as a soft "slow down" state.
+export async function checkEmail(
+  email: string,
+): Promise<{ available: boolean }> {
+  const response = await fetch(
+    `${API_PREFIX}/auth/check-email?email=${encodeURIComponent(email)}`,
+  );
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error || "Check failed");
+  return body;
+}
+
 export async function createPayment(payload: PaymentPayload, token: string) {
   return request<PaymentResponse>("/payments", {
     method: "POST",
@@ -68,6 +67,24 @@ export async function createPayment(payload: PaymentPayload, token: string) {
       amount: payload.amount,
       currency: payload.currency,
     }),
+  });
+}
+
+export async function getPayments(token: string) {
+  return request<{ payments: Payment[] }>("/payments", {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function createPaymentIntent(
+  payload: { amount: number; currency: string },
+  token: string,
+) {
+  return request<{ clientSecret: string }>("/stripe/intent", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
   });
 }
 
