@@ -1,4 +1,5 @@
 import { useState, type SyntheticEvent } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { loginUser } from "../../libs/api";
 
@@ -98,8 +99,14 @@ const Login = () => {
           >
             {isLoading ? "Signing in..." : "Sign in"}
           </button>
-
         </form>
+        <div className="border-t border-white/10 mt-4 mb-4 w-full" />
+        <p className="text-sm text-white/50 text-center">
+          Don't have an account?{" "}
+          <Link to="/register" className="text-white hover:underline">
+            Register
+          </Link>
+        </p>
       </div>
     </section>
   )
